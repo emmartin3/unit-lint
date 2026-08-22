@@ -1,0 +1,89 @@
+# unit-lint
+
+Config files and source code are full of numbers that mean nothing without their
+unit: `timeout: 30000`, `bufferSize: 4096`, `cacheSize: 500MB` sitting next to
+`maxUpload: 2GiB` in the same file. Every one of those is a small trap — is the
+timeout in seconds or milliseconds, is the cache size decimal or binary megabytes,
+did someone typo `MG` for `MB`. unit-lint scans text files for exactly these
+patterns and reports them with a file and line number, the way a normal linter
+would report a syntax problem.
+
+It doesn't parse any particular file format. It works on plain text, line by
+line, so it applies equally to YAML, JSON, `.env` files, Terraform, or a
+TypeScript source file with inline constants.
+
+## Building
+
+There are no runtime dependencies. You need a TypeScript compiler available
+(install `typescript` yourself, globally or as a devDependency) to turn the
+sources in `src/` into runnable JavaScript:
+
+```
+tsc
+node dist/cli.js config.yaml
+```
+
+## Usage
+
+Given `config.yaml`:
+
+```yaml
+cacheSize: 500MB
+uploadBuffer: 2GiB
+requestTimeout: 30000
+retryDelay: 500
+maxUpload: 200MG
+```
+
+```
+$ node dist/cli.js config.yaml
+config.yaml
+  2:15  warning mixed-unit-style  'GiB' uses the binary convention, but this file mostly uses decimal units — pick one
+  3:18  warning bare-duration-value  'requestTimeout' is set to a bare number (30000) with no unit — is that seconds or milliseconds?
+  4:13  warning bare-duration-value  'retryDelay' is set to a bare number (500) with no unit — is that seconds or milliseconds?
+  5:12  error   unknown-unit  'MG' looks like a typo for 'MB'
+
+4 problem(s)  (1 error, 3 warning)
+```
+
+Pass `--json` to get the same findings as a machine-readable array instead,
+for feeding into CI or another tool:
+
+```
+$ node dist/cli.js --json config.yaml
+[
+  {
+    "file": "config.yaml",
+    "line": 2,
+    "column": 15,
+    "rule": "mixed-unit-style",
+    "severity": "warning",
+    "message": "'GiB' uses the binary convention, but this file mostly uses decimal units — pick one"
+  },
+  ...
+]
+```
+
+The process exits with status 1 if any finding has `severity: "error"`, 0
+otherwise — `--json` doesn't change the exit code.
+
+## Rules
+
+- **mixed-unit-style** — a file uses both decimal (`KB`, `MB`, `GB`) and binary
+  (`KiB`, `MiB`, `GiB`) byte units. Occurrences of whichever convention is used
+  less often are flagged.
+- **bare-duration-value** — a key that looks like it holds a duration
+  (`timeout`, `delay`, `ttl`, `interval`, `retry`, `wait`, `cooldown`,
+  `deadline`, `expires`) is assigned a plain integer with no unit suffix.
+- **bare-size-value** — same idea for size-like keys (`size`, `maxSize`,
+  `limit`, `buffer`, `chunk`, `capacity`, `quota`, `bytes`).
+- **unknown-unit** — a number is followed by a suffix that's almost certainly
+  a typo or a unit borrowed from another language (`MG`, `GO`, `KO`, `SEC`,
+  `MIN`, `HR`), with a suggested correction.
+
+## Library use
+
+`src/units.ts` exports `parseByteSize` and `parseDuration` on their own, and
+`src/lint.ts` exports `lintText(file, text)`, which returns a `Finding[]`
+without touching the filesystem — useful if you want to lint an in-memory
+string or wire this into another tool.

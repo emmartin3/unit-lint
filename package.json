@@ -1,0 +1,22 @@
+{
+  "name": "unit-lint",
+  "version": "0.1.0",
+  "description": "Lints source and config files for ambiguous byte size and duration literals",
+  "type": "module",
+  "engines": {
+    "node": ">=18"
+  },
+  "bin": {
+    "unit-lint": "dist/cli.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc"
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "typescript": "^5.5.4"
+  }
+}

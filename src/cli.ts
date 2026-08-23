@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { readFileSync } from 'node:fs';
-import { lintText, type Finding } from './lint.js';
+import { loadConfig } from './config.js';
+import { lintText, type Finding, type LintOptions } from './lint.js';
 
 function printHuman(findings: Finding[]): void {
   let currentFile = '';
@@ -21,12 +22,38 @@ function printHuman(findings: Finding[]): void {
 }
 
 function main(argv: string[]): number {
-  const jsonOutput = argv.includes('--json');
-  const files = argv.filter((arg) => arg !== '--json');
+  let jsonOutput = false;
+  let configPath: string | undefined;
+  const files: string[] = [];
+
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i];
+    if (arg === '--json') {
+      jsonOutput = true;
+    } else if (arg === '--config') {
+      configPath = argv[++i];
+      if (configPath === undefined) {
+        console.error('unit-lint: --config requires a path');
+        return 1;
+      }
+    } else {
+      files.push(arg);
+    }
+  }
 
   if (files.length === 0) {
-    console.error('usage: unit-lint [--json] <file...>');
+    console.error('usage: unit-lint [--json] [--config <file>] <file...>');
     return 1;
+  }
+
+  let options: LintOptions = {};
+  if (configPath !== undefined) {
+    try {
+      options = loadConfig(configPath);
+    } catch (err) {
+      console.error(`unit-lint: ${(err as Error).message}`);
+      return 1;
+    }
   }
 
   const allFindings: Finding[] = [];
@@ -38,7 +65,7 @@ function main(argv: string[]): number {
       console.error(`unit-lint: could not read ${file}: ${(err as Error).message}`);
       return 1;
     }
-    allFindings.push(...lintText(file, text));
+    allFindings.push(...lintText(file, text, options));
   }
 
   if (jsonOutput) {

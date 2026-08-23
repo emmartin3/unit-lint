@@ -81,9 +81,36 @@ otherwise — `--json` doesn't change the exit code.
   a typo or a unit borrowed from another language (`MG`, `GO`, `KO`, `SEC`,
   `MIN`, `HR`), with a suggested correction.
 
+## Configuration
+
+By default `bare-duration-value` and `bare-size-value` only look at a fixed list of
+key names (see Rules, below). Pass `--config` with a JSON file to extend those lists
+or to change a rule's severity:
+
+```json
+{
+  "durationKeys": ["staleAfter", "pollEvery"],
+  "sizeKeys": ["pageSize"],
+  "severities": {
+    "bare-size-value": "error",
+    "mixed-unit-style": "error"
+  }
+}
+```
+
+```
+$ node dist/cli.js --config unit-lint.config.json config.yaml
+```
+
+`durationKeys` and `sizeKeys` are added to the built-in lists, not a replacement for
+them. `severities` maps a rule name to `"error"` or `"warning"`; any rule not listed
+keeps its default severity.
+
 ## Library use
 
 `src/units.ts` exports `parseByteSize` and `parseDuration` on their own, and
-`src/lint.ts` exports `lintText(file, text)`, which returns a `Finding[]`
-without touching the filesystem — useful if you want to lint an in-memory
-string or wire this into another tool.
+`src/lint.ts` exports `lintText(file, text, options?)`, which returns a
+`Finding[]` without touching the filesystem — useful if you want to lint an
+in-memory string or wire this into another tool. `options` takes the same
+`durationKeys`, `sizeKeys`, and `severities` fields as the config file.
+`src/config.ts` exports `loadConfig(path)` to read one of those files directly.

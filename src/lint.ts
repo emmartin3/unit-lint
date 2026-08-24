@@ -77,6 +77,53 @@ const UNIT_TYPOS: Record<string, string> = {
 
 const UNIT_TYPO_PATTERN = /\b(\d+(?:\.\d+)?)\s?(MG|GO|KO|SECS?|MINS?|HRS?)\b/gi;
 
+// No comment-syntax assumptions here — the tool works on plain text across file
+// formats, so the directive is just a phrase, matched wherever it appears on the line.
+// An optional "rule-a,rule-b" suffix limits the suppression to those rules; with no
+// suffix, every finding on the target line is suppressed.
+const DISABLE_DIRECTIVE_PATTERN = /unit-lint-disable-(line|next-line)(?::\s*([a-zA-Z0-9,\- ]+))?/;
+
+type DisableSet = 'all' | Set<RuleName>;
+
+function parseDisableDirectives(lines: string[]): Map<number, DisableSet> {
+  const disabled = new Map<number, DisableSet>();
+
+  lines.forEach((line, index) => {
+    const match = DISABLE_DIRECTIVE_PATTERN.exec(line);
+    if (!match) return;
+
+    const targetLine = match[1] === 'line' ? index + 1 : index + 2;
+    const rulesPart = match[2]?.trim();
+
+    let toApply: DisableSet;
+    if (!rulesPart) {
+      toApply = 'all';
+    } else {
+      toApply = new Set(
+        rulesPart
+          .split(',')
+          .map((name) => name.trim())
+          .filter((name): name is RuleName => (RULE_NAMES as readonly string[]).includes(name))
+      );
+    }
+
+    const existing = disabled.get(targetLine);
+    if (existing === 'all' || toApply === 'all') {
+      disabled.set(targetLine, 'all');
+    } else {
+      disabled.set(targetLine, new Set([...existing ?? [], ...toApply]));
+    }
+  });
+
+  return disabled;
+}
+
+function isSuppressed(disabled: Map<number, DisableSet>, line: number, rule: RuleName): boolean {
+  const entry = disabled.get(line);
+  if (!entry) return false;
+  return entry === 'all' || entry.has(rule);
+}
+
 interface ByteOccurrence {
   line: number;
   column: number;
@@ -98,6 +145,7 @@ export function lintText(file: string, text: string, options: LintOptions = {}):
   const findings: Finding[] = [];
   const lines = text.split(/\r\n|\r|\n/);
   const byteOccurrences: ByteOccurrence[] = [];
+  const disabled = parseDisableDirectives(lines);
 
   lines.forEach((line, index) => {
     const lineNumber = index + 1;
@@ -171,6 +219,7 @@ export function lintText(file: string, text: string, options: LintOptions = {}):
     }
   }
 
-  findings.sort((a, b) => a.line - b.line || a.column - b.column);
-  return findings;
+  const visible = findings.filter((f) => !isSuppressed(disabled, f.line, f.rule as RuleName));
+  visible.sort((a, b) => a.line - b.line || a.column - b.column);
+  return visible;
 }

@@ -106,6 +106,29 @@ $ node dist/cli.js --config unit-lint.config.json config.yaml
 them. `severities` maps a rule name to `"error"` or `"warning"`; any rule not listed
 keeps its default severity.
 
+## Ignoring a line
+
+Put `unit-lint-disable-line` anywhere on a line to suppress every finding on
+that line, or `unit-lint-disable-next-line` to suppress findings on the line
+that follows — useful when the directive itself has to go in a comment above
+the value rather than trailing it:
+
+```yaml
+retryDelay: 500  # unit-lint-disable-line
+# unit-lint-disable-next-line
+maxUpload: 200MG
+```
+
+Add `:rule-name` (or a comma-separated list) to suppress only specific rules
+and let the others still fire:
+
+```yaml
+cacheSize: 500MB  # unit-lint-disable-line:mixed-unit-style
+```
+
+There's no comment syntax requirement — since unit-lint doesn't parse the
+host file format, it just looks for the phrase anywhere on the line.
+
 ## Library use
 
 `src/units.ts` exports `parseByteSize` and `parseDuration` on their own, and

@@ -80,6 +80,10 @@ otherwise — `--json` doesn't change the exit code.
 - **unknown-unit** — a number is followed by a suffix that's almost certainly
   a typo or a unit borrowed from another language (`MG`, `GO`, `KO`, `SEC`,
   `MIN`, `HR`), with a suggested correction.
+- **byte-size-precision-loss** — a byte size literal (e.g. `9PiB`) works out to
+  more bytes than `Number.MAX_SAFE_INTEGER`. Any tool that reads the value with
+  `JSON.parse` or does float64 arithmetic on it — rather than treating it as an
+  opaque string — will silently round it.
 
 ## Configuration
 

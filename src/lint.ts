@@ -48,6 +48,7 @@ export const RULE_NAMES = [
   'bare-size-value',
   'unknown-unit',
   'mixed-unit-style',
+  'byte-size-precision-loss',
 ] as const;
 
 export type RuleName = (typeof RULE_NAMES)[number];
@@ -152,12 +153,28 @@ export function lintText(file: string, text: string, options: LintOptions = {}):
 
     for (const match of line.matchAll(BYTE_UNIT_PATTERN)) {
       const parsed = parseByteSize(`${match[1]}${match[2]}`);
-      if (parsed && parsed.standard !== 'exact') {
+      if (!parsed) continue;
+
+      if (parsed.standard !== 'exact') {
         byteOccurrences.push({
           line: lineNumber,
           column: match.index! + 1,
           unit: match[2],
           standard: parsed.standard,
+        });
+      }
+
+      // Past this point a byte count can't be represented exactly as an IEEE 754
+      // double, so anything downstream that does JSON.parse + arithmetic on it
+      // (rather than treating it as an opaque string) will silently round.
+      if (parsed.bytes > Number.MAX_SAFE_INTEGER) {
+        findings.push({
+          file,
+          line: lineNumber,
+          column: match.index! + 1,
+          rule: 'byte-size-precision-loss',
+          severity: severityOf('byte-size-precision-loss', 'warning'),
+          message: `'${match[1]}${match[2]}' is ${parsed.bytes} bytes, past Number.MAX_SAFE_INTEGER (${Number.MAX_SAFE_INTEGER}) — it can't round-trip exactly through JSON.parse or other float64 math`,
         });
       }
     }

@@ -67,6 +67,16 @@ $ node dist/cli.js --json config.yaml
 The process exits with status 1 if any finding has `severity: "error"`, 0
 otherwise — `--json` doesn't change the exit code.
 
+Arguments can be files, directories, or glob patterns. A directory is walked
+recursively (skipping `.git` and `node_modules`); a pattern containing `*`,
+`?`, or `[` is expanded against the filesystem, so it works even on a shell
+that leaves it unexpanded — `**` matches across any number of directories:
+
+```
+$ node dist/cli.js config/
+$ node dist/cli.js 'config/**/*.yaml'
+```
+
 ## Rules
 
 - **mixed-unit-style** — a file uses both decimal (`KB`, `MB`, `GB`) and binary

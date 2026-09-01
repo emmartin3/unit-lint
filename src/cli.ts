@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { readFileSync } from 'node:fs';
 import { loadConfig } from './config.js';
+import { resolveArg } from './glob.js';
 import { lintText, type Finding, type LintOptions } from './lint.js';
 
 function printHuman(findings: Finding[]): void {
@@ -24,7 +25,7 @@ function printHuman(findings: Finding[]): void {
 function main(argv: string[]): number {
   let jsonOutput = false;
   let configPath: string | undefined;
-  const files: string[] = [];
+  const rawArgs: string[] = [];
 
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
@@ -37,13 +38,29 @@ function main(argv: string[]): number {
         return 1;
       }
     } else {
-      files.push(arg);
+      rawArgs.push(arg);
     }
   }
 
-  if (files.length === 0) {
-    console.error('usage: unit-lint [--json] [--config <file>] <file...>');
+  if (rawArgs.length === 0) {
+    console.error('usage: unit-lint [--json] [--config <file>] <file, directory, or glob pattern...>');
     return 1;
+  }
+
+  const files: string[] = [];
+  const seen = new Set<string>();
+  for (const arg of rawArgs) {
+    const resolved = resolveArg(arg);
+    if (resolved.error !== undefined) {
+      console.error(`unit-lint: ${resolved.error}`);
+      return 1;
+    }
+    for (const file of resolved.files) {
+      if (!seen.has(file)) {
+        seen.add(file);
+        files.push(file);
+      }
+    }
   }
 
   let options: LintOptions = {};

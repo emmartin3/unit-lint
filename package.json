@@ -13,7 +13,8 @@
     "dist"
   ],
   "scripts": {
-    "build": "tsc"
+    "build": "tsc",
+    "test": "tsc && node --test dist"
   },
   "license": "MIT",
   "devDependencies": {

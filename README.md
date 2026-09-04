@@ -23,6 +23,15 @@ tsc
 node dist/cli.js config.yaml
 ```
 
+## Testing
+
+```
+npm test
+```
+
+Runs the test suite with Node's built-in test runner (`node --test`), against
+the compiled output in `dist/`. No test framework dependency needed.
+
 ## Usage
 
 Given `config.yaml`:

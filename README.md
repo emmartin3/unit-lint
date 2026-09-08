@@ -76,6 +76,23 @@ $ node dist/cli.js --json config.yaml
 The process exits with status 1 if any finding has `severity: "error"`, 0
 otherwise — `--json` doesn't change the exit code.
 
+Pass `--fix` to have `unknown-unit` findings corrected in place — `200MG`
+becomes `200MB`, `10HRS` becomes `10h`, and so on. Only the unit suffix is
+rewritten; the number and everything else on the line is left alone. Other
+rules don't have an automatic fix (there's no safe guess for what a bare
+`30000` should become), so they're still reported after the fix runs:
+
+```
+$ node dist/cli.js --fix config.yaml
+fixed 1 issue(s)
+config.yaml
+  2:15  warning mixed-unit-style  'GiB' uses the binary convention, but this file mostly uses decimal units — pick one
+  3:18  warning bare-duration-value  'requestTimeout' is set to a bare number (30000) with no unit — is that seconds or milliseconds?
+  4:13  warning bare-duration-value  'retryDelay' is set to a bare number (500) with no unit — is that seconds or milliseconds?
+
+3 problem(s)  (0 error, 3 warning)
+```
+
 Arguments can be files, directories, or glob patterns. A directory is walked
 recursively (skipping `.git` and `node_modules`); a pattern containing `*`,
 `?`, or `[` is expanded against the filesystem, so it works even on a shell
@@ -98,7 +115,8 @@ $ node dist/cli.js 'config/**/*.yaml'
   `limit`, `buffer`, `chunk`, `capacity`, `quota`, `bytes`).
 - **unknown-unit** — a number is followed by a suffix that's almost certainly
   a typo or a unit borrowed from another language (`MG`, `GO`, `KO`, `SEC`,
-  `MIN`, `HR`), with a suggested correction.
+  `MIN`, `HR`), with a suggested correction. The only rule with an autofix
+  (`--fix`).
 - **byte-size-precision-loss** — a byte size literal (e.g. `9PiB`) works out to
   more bytes than `Number.MAX_SAFE_INTEGER`. Any tool that reads the value with
   `JSON.parse` or does float64 arithmetic on it — rather than treating it as an
@@ -158,5 +176,7 @@ host file format, it just looks for the phrase anywhere on the line.
 `src/lint.ts` exports `lintText(file, text, options?)`, which returns a
 `Finding[]` without touching the filesystem — useful if you want to lint an
 in-memory string or wire this into another tool. `options` takes the same
-`durationKeys`, `sizeKeys`, and `severities` fields as the config file.
+`durationKeys`, `sizeKeys`, and `severities` fields as the config file. Some
+findings carry a `fix`; `applyFixes(text, findings)` returns the text with
+those fixes applied, again without touching the filesystem.
 `src/config.ts` exports `loadConfig(path)` to read one of those files directly.

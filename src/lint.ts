@@ -2,6 +2,14 @@ import { parseByteSize } from './units.js';
 
 export type Severity = 'error' | 'warning';
 
+export interface Fix {
+  // 1-based column of the first character to replace, and how many characters
+  // (of the original line) the replacement covers.
+  column: number;
+  length: number;
+  replacement: string;
+}
+
 export interface Finding {
   file: string;
   line: number;
@@ -9,6 +17,7 @@ export interface Finding {
   rule: string;
   severity: Severity;
   message: string;
+  fix?: Fix;
 }
 
 // Byte units, scanned across the whole line so we can compare conventions within a file.
@@ -203,6 +212,10 @@ export function lintText(file: string, text: string, options: LintOptions = {}):
 
     for (const match of line.matchAll(UNIT_TYPO_PATTERN)) {
       const suggestion = UNIT_TYPOS[match[2].toUpperCase()];
+      // The unit is always the tail of the match (number, optional space, unit),
+      // so its column is the match end minus its own length — only the unit
+      // itself gets replaced, the number and any space before it are untouched.
+      const unitColumn = match.index! + match[0].length - match[2].length + 1;
       findings.push({
         file,
         line: lineNumber,
@@ -210,6 +223,7 @@ export function lintText(file: string, text: string, options: LintOptions = {}):
         rule: 'unknown-unit',
         severity: severityOf('unknown-unit', 'error'),
         message: `'${match[2]}' looks like a typo for '${suggestion}'`,
+        fix: { column: unitColumn, length: match[2].length, replacement: suggestion },
       });
     }
   });
@@ -239,4 +253,39 @@ export function lintText(file: string, text: string, options: LintOptions = {}):
   const visible = findings.filter((f) => !isSuppressed(disabled, f.line, f.rule as RuleName));
   visible.sort((a, b) => a.line - b.line || a.column - b.column);
   return visible;
+}
+
+// Applies every fixable finding to the original text and returns the result. Findings
+// without a fix are ignored, so callers can pass the full result of lintText() straight
+// through. Fixes on the same line are applied right-to-left so that earlier columns
+// stay valid as later ones on that line are rewritten.
+export function applyFixes(text: string, findings: Finding[]): string {
+  const byLine = new Map<number, Fix[]>();
+  for (const finding of findings) {
+    if (!finding.fix) continue;
+    const list = byLine.get(finding.line);
+    if (list) {
+      list.push(finding.fix);
+    } else {
+      byLine.set(finding.line, [finding.fix]);
+    }
+  }
+  if (byLine.size === 0) return text;
+
+  // Capturing the separators (rather than discarding them, as the scan above does)
+  // lets the file be reassembled with its original line endings intact.
+  const segments = text.split(/(\r\n|\r|\n)/);
+  for (let i = 0; i < segments.length; i += 2) {
+    const lineNumber = i / 2 + 1;
+    const fixes = byLine.get(lineNumber);
+    if (!fixes) continue;
+
+    let line = segments[i];
+    for (const fix of [...fixes].sort((a, b) => b.column - a.column)) {
+      const start = fix.column - 1;
+      line = line.slice(0, start) + fix.replacement + line.slice(start + fix.length);
+    }
+    segments[i] = line;
+  }
+  return segments.join('');
 }

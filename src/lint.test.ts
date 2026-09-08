@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { lintText } from './lint.js';
+import { applyFixes, lintText } from './lint.js';
 
 function rules(findings: ReturnType<typeof lintText>): string[] {
   return findings.map((f) => f.rule);
@@ -42,6 +42,41 @@ test('unknown-unit: recognizes borrowed time abbreviations', () => {
   const findings = lintText('f', 'value = 10HRS\n');
   assert.deepEqual(rules(findings), ['unknown-unit']);
   assert.match(findings[0].message, /looks like a typo for 'h'/);
+});
+
+test('unknown-unit: findings carry a fix that replaces only the unit', () => {
+  const findings = lintText('f', 'upload: 200MG\n');
+  assert.deepEqual(findings[0].fix, { column: 12, length: 2, replacement: 'MB' });
+});
+
+test('applyFixes: rewrites a typo unit in place, leaving the rest of the line alone', () => {
+  const text = 'upload: 200MG\n';
+  const fixed = applyFixes(text, lintText('f', text));
+  assert.equal(fixed, 'upload: 200MB\n');
+});
+
+test('applyFixes: multiple fixes on one line apply without shifting each other', () => {
+  const text = 'a: 10MG, b: 20GO\n';
+  const fixed = applyFixes(text, lintText('f', text));
+  assert.equal(fixed, 'a: 10MB, b: 20GB\n');
+});
+
+test('applyFixes: fixes across several lines, preserving line endings', () => {
+  const text = 'a: 10MG\nb: 500MB\nc: 5KO\n';
+  const fixed = applyFixes(text, lintText('f', text));
+  assert.equal(fixed, 'a: 10MB\nb: 500MB\nc: 5KB\n');
+});
+
+test('applyFixes: leaves text untouched when there is nothing fixable', () => {
+  const text = 'timeout: 30000\n';
+  const fixed = applyFixes(text, lintText('f', text));
+  assert.equal(fixed, text);
+});
+
+test('applyFixes: a suppressed finding has already been filtered by lintText, so it is not fixed', () => {
+  const text = 'upload: 200MG  # unit-lint-disable-line\n';
+  const fixed = applyFixes(text, lintText('f', text));
+  assert.equal(fixed, text);
 });
 
 test('mixed-unit-style: flags the minority convention only', () => {

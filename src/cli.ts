@@ -1,8 +1,8 @@
 #!/usr/bin/env node
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { loadConfig } from './config.js';
 import { resolveArg } from './glob.js';
-import { lintText, type Finding, type LintOptions } from './lint.js';
+import { applyFixes, lintText, type Finding, type LintOptions } from './lint.js';
 
 function printHuman(findings: Finding[]): void {
   let currentFile = '';
@@ -24,6 +24,7 @@ function printHuman(findings: Finding[]): void {
 
 function main(argv: string[]): number {
   let jsonOutput = false;
+  let fixMode = false;
   let configPath: string | undefined;
   const rawArgs: string[] = [];
 
@@ -31,6 +32,8 @@ function main(argv: string[]): number {
     const arg = argv[i];
     if (arg === '--json') {
       jsonOutput = true;
+    } else if (arg === '--fix') {
+      fixMode = true;
     } else if (arg === '--config') {
       configPath = argv[++i];
       if (configPath === undefined) {
@@ -43,7 +46,7 @@ function main(argv: string[]): number {
   }
 
   if (rawArgs.length === 0) {
-    console.error('usage: unit-lint [--json] [--config <file>] <file, directory, or glob pattern...>');
+    console.error('usage: unit-lint [--json] [--fix] [--config <file>] <file, directory, or glob pattern...>');
     return 1;
   }
 
@@ -74,6 +77,7 @@ function main(argv: string[]): number {
   }
 
   const allFindings: Finding[] = [];
+  let fixedCount = 0;
   for (const file of files) {
     let text: string;
     try {
@@ -82,7 +86,23 @@ function main(argv: string[]): number {
       console.error(`unit-lint: could not read ${file}: ${(err as Error).message}`);
       return 1;
     }
-    allFindings.push(...lintText(file, text, options));
+
+    let findings = lintText(file, text, options);
+    if (fixMode) {
+      const fixableCount = findings.filter((f) => f.fix !== undefined).length;
+      if (fixableCount > 0) {
+        writeFileSync(file, applyFixes(text, findings), 'utf8');
+        fixedCount += fixableCount;
+        // Re-lint the fixed contents so what's reported (and its exit code)
+        // reflects what's left on disk, not what was true before the rewrite.
+        findings = lintText(file, readFileSync(file, 'utf8'), options);
+      }
+    }
+    allFindings.push(...findings);
+  }
+
+  if (fixMode && fixedCount > 0) {
+    console.log(`fixed ${fixedCount} issue(s)`);
   }
 
   if (jsonOutput) {

@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { readFileSync, writeFileSync } from 'node:fs';
+import { pathToFileURL } from 'node:url';
 import { loadConfig } from './config.js';
 import { resolveArg } from './glob.js';
 import { applyFixes, lintText, type Finding, type LintOptions } from './lint.js';
@@ -22,7 +23,7 @@ function printHuman(findings: Finding[]): void {
   console.log(`${findings.length} problem(s)  (${errorCount} error, ${warningCount} warning)`);
 }
 
-function main(argv: string[]): number {
+export function main(argv: string[]): number {
   let jsonOutput = false;
   let fixMode = false;
   let configPath: string | undefined;
@@ -116,4 +117,9 @@ function main(argv: string[]): number {
   return allFindings.some((f) => f.severity === 'error') ? 1 : 0;
 }
 
-process.exit(main(process.argv.slice(2)));
+// Only run as a CLI when executed directly, not when a test imports main() to call
+// it in-process — importing this module must never have the side effect of exiting.
+const isMainModule = process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href;
+if (isMainModule) {
+  process.exit(main(process.argv.slice(2)));
+}

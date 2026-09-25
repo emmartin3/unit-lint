@@ -58,6 +58,7 @@ export const RULE_NAMES = [
   'unknown-unit',
   'mixed-unit-style',
   'byte-size-precision-loss',
+  'non-positive-value',
 ] as const;
 
 export type RuleName = (typeof RULE_NAMES)[number];
@@ -69,6 +70,14 @@ function escapeRegExp(text: string): string {
 function buildKeyPattern(keys: string[]): RegExp {
   const alternatives = keys.map(escapeRegExp).join('|');
   return new RegExp(`\\b(${alternatives})\\b\\s*[:=]\\s*(\\d+)(?!\\s*[a-zA-Z])`, 'gi');
+}
+
+// Unlike buildKeyPattern, this allows a sign and a trailing unit suffix — a negative
+// or zero quantity is wrong whether or not it's written with a unit ("-1" or "-1h"
+// are both nonsensical for a duration), so the unit lookahead restriction doesn't apply.
+function buildSignedValuePattern(keys: string[]): RegExp {
+  const alternatives = keys.map(escapeRegExp).join('|');
+  return new RegExp(`\\b(${alternatives})\\b\\s*[:=]\\s*(-?\\d+(?:\\.\\d+)?)`, 'gi');
 }
 
 // Common typo'd or borrowed unit suffixes, mapped to what they were probably meant to be.
@@ -148,8 +157,12 @@ export interface LintOptions {
 }
 
 export function lintText(file: string, text: string, options: LintOptions = {}): Finding[] {
-  const durationKeyPattern = buildKeyPattern(options.durationKeys ?? DEFAULT_DURATION_KEYS);
-  const sizeKeyPattern = buildKeyPattern(options.sizeKeys ?? DEFAULT_SIZE_KEYS);
+  const durationKeys = options.durationKeys ?? DEFAULT_DURATION_KEYS;
+  const sizeKeys = options.sizeKeys ?? DEFAULT_SIZE_KEYS;
+  const durationKeyPattern = buildKeyPattern(durationKeys);
+  const sizeKeyPattern = buildKeyPattern(sizeKeys);
+  const nonPositiveDurationPattern = buildSignedValuePattern(durationKeys);
+  const nonPositiveSizePattern = buildSignedValuePattern(sizeKeys);
   const severityOf = (rule: RuleName, fallback: Severity): Severity => options.severities?.[rule] ?? fallback;
 
   const findings: Finding[] = [];
@@ -207,6 +220,21 @@ export function lintText(file: string, text: string, options: LintOptions = {}):
         rule: 'bare-size-value',
         severity: severityOf('bare-size-value', 'warning'),
         message: `'${match[1]}' is set to a bare number (${match[2]}) with no unit — bytes, KB, or MB?`,
+      });
+    }
+
+    for (const match of [...line.matchAll(nonPositiveDurationPattern), ...line.matchAll(nonPositiveSizePattern)]) {
+      const amount = Number(match[2]);
+      if (amount > 0) continue;
+      findings.push({
+        file,
+        line: lineNumber,
+        column: match.index! + 1,
+        rule: 'non-positive-value',
+        severity: severityOf('non-positive-value', 'warning'),
+        message: amount < 0
+          ? `'${match[1]}' is set to a negative value (${match[2]}) — sizes and durations can't be negative`
+          : `'${match[1]}' is set to 0 — if that's meant to disable it, a comment would help; otherwise this looks like a mistake`,
       });
     }
 

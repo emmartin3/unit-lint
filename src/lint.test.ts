@@ -136,6 +136,34 @@ test('options.durationKeys replaces rather than extends the default list', () =>
   assert.equal(findings[0].line, 1);
 });
 
+test('non-positive-value: flags a negative bare duration', () => {
+  const findings = lintText('f', 'timeout: -30000\n');
+  assert.deepEqual(rules(findings), ['non-positive-value']);
+  assert.match(findings[0].message, /negative value \(-30000\)/);
+});
+
+test('non-positive-value: flags a negative value with a unit', () => {
+  const findings = lintText('f', 'delay: -5s\n');
+  assert.deepEqual(rules(findings), ['non-positive-value']);
+});
+
+test('non-positive-value: flags a zero size, with a different message than negative', () => {
+  // "0" is also a bare number with no unit, so bare-size-value fires alongside it.
+  const findings = lintText('f', 'buffer: 0\n');
+  assert.deepEqual(rules(findings), ['bare-size-value', 'non-positive-value']);
+  assert.match(findings[1].message, /set to 0/);
+});
+
+test('non-positive-value: a positive value is not flagged', () => {
+  const findings = lintText('f', 'timeout: 30000\nbuffer: 4096\n');
+  assert.deepEqual(rules(findings).filter((r) => r === 'non-positive-value'), []);
+});
+
+test('non-positive-value: a leading zero on a positive number is not mistaken for zero', () => {
+  const findings = lintText('f', 'timeout: 0500\n');
+  assert.deepEqual(rules(findings).filter((r) => r === 'non-positive-value'), []);
+});
+
 test('severities option overrides a rule default', () => {
   const findings = lintText('f', 'timeout: 30000\n', {
     severities: { 'bare-duration-value': 'error' },

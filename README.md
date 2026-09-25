@@ -121,6 +121,10 @@ $ node dist/cli.js 'config/**/*.yaml'
   more bytes than `Number.MAX_SAFE_INTEGER`. Any tool that reads the value with
   `JSON.parse` or does float64 arithmetic on it — rather than treating it as an
   opaque string — will silently round it.
+- **non-positive-value** — a duration or size key is assigned a negative number
+  (`timeout: -1`) or zero (`retryDelay: 0`), with or without a unit. Negative
+  sizes and durations are never meaningful, and zero is usually a typo for a
+  real value rather than an intentional "disabled" sentinel.
 
 ## Configuration
 
